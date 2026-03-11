@@ -1,16 +1,76 @@
-# React + Vite
+# SEPRISA – Sistema de Gestión y Recaudación
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+App de gestión de máquinas recreativas (grúas, pelucheras, monedas) con rutas de recaudación geolocalizadas.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | React 19 + Vite |
+| Backend | Express 4 + better-sqlite3 |
+| Mapa | Leaflet.js + OSRM (ruteo) + OpenStreetMap |
+| DB | SQLite (`server/seprisa.db`) |
 
-## React Compiler
+## Funcionalidades
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Dashboard** – KPIs, últimos registros de recaudación, estado de máquinas
+- **Máquinas** – Listado con estado/ubicación, creación de nuevas máquinas, edición inline
+- **Rutas de Recaudación** – Mapa interactivo con selección de paradas, optimización de orden (nearest-neighbor), inicio/fin de ruta con tracking de distancia y tiempo
+- **Registro de Recaudación** – Formulario de cobranza por máquina (contadores, montos, fotos)
+- **Roles** – `admin` (dashboard completo) / `terreno` (app móvil recaudador)
 
-## Expanding the ESLint configuration
+## Instalación
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+cd pos-app
+npm install
+```
+
+## Desarrollo
+
+```bash
+# Backend (puerto 3001)
+npm run server:dev
+
+# Frontend (puerto 5174)
+npm run dev
+```
+
+Usuarios por defecto: `admin / admin` · `terreno / terreno`
+
+## Estructura
+
+```
+pos-app/
+├── server/
+│   ├── index.js          # Express entry point
+│   ├── db.js             # SQLite schema + seed
+│   └── routes/
+│       ├── machines.js   # CRUD máquinas + meta (tipos, lugares)
+│       ├── records.js    # Registros de recaudación
+│       └── routeRuns.js  # Ejecuciones de rutas
+└── src/
+    ├── App.jsx           # Routing, auth, state global
+    ├── api.js            # Capa de fetch hacia el backend
+    └── MapView.jsx       # Mapa + optimización de ruta
+```
+
+## API REST (puerto 3001)
+
+```
+GET    /api/machines
+POST   /api/machines
+PATCH  /api/machines/:id
+DELETE /api/machines/:id
+GET    /api/machines/meta/tipos
+GET    /api/machines/meta/lugares
+POST   /api/machines/meta/lugares
+
+GET    /api/records?machineId=
+POST   /api/records
+
+GET    /api/route-runs?status=
+POST   /api/route-runs
+PATCH  /api/route-runs/:id
+PATCH  /api/route-runs/:id/stops/:stopId
+```
