@@ -31,7 +31,7 @@ function markerColor(status, isNext) {
     return '#9ca3af';
 }
 
-export default function MapView({ machines, onBack }) {
+export default function MapView({ machines, onBack, mobile = false, onRunStarted }) {
     const containerRef = useRef(null);
     const mapRef = useRef(null);
     const routingRef = useRef(null);
@@ -48,6 +48,7 @@ export default function MapView({ machines, onBack }) {
     const [segmentStats, setSegmentStats] = useState({ distance: 0, time: 0 });
     const [runId, setRunId] = useState(null);
     const [stopIds, setStopIds] = useState([]);
+    const [panelOpen, setPanelOpen] = useState(false);
 
     const firstPendingIdx = statuses.findIndex(s => s === 'pending');
     const allHandled = isTraveling && firstPendingIdx === -1;
@@ -157,6 +158,9 @@ export default function MapView({ machines, onBack }) {
         mapRef.current = map;
         routingRef.current = routing;
 
+        // En móvil el contenedor flex puede no tener su tamaño final al montar
+        if (mobile) setTimeout(() => map.invalidateSize(), 100);
+
         return () => {
             map.removeControl(routing);
             map.remove();
@@ -218,6 +222,10 @@ export default function MapView({ machines, onBack }) {
     async function startTravel() {
         activeStopsRef.current = orderedStops.slice();
         const run = await createRouteRun(orderedStops.map(m => m.id));
+        if (onRunStarted) {
+            onRunStarted(run.id, run.stops, orderedStops.slice());
+            return;
+        }
         setRunId(run.id);
         setStopIds(run.stops.map(s => s.id));
         setIsTraveling(true);
@@ -271,13 +279,208 @@ export default function MapView({ machines, onBack }) {
     const totalTime = accumulated.time + segmentStats.time;
     const travelList = isTraveling ? activeStopsRef.current : null;
 
-    return (
-        <div style={{ display: 'flex', height: '100%', margin: '-1.5rem' }}>
+    // Shared panel list content
+    const stopsList = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {/* — MODO VIAJE — */}
+            {isTraveling && travelList && (
+                <>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                        Paradas ({travelList.length})
+                    </div>
+                    {travelList.map((m, i) => {
+                        const status = statuses[i];
+                        const isNext = i === firstPendingIdx;
+                        const color = markerColor(status, isNext);
+                        return (
+                            <div key={m.id} style={{
+                                border: `1px solid ${status === 'done' ? 'rgba(16,185,129,0.3)' : status === 'failed' ? 'rgba(239,68,68,0.3)' : isNext ? 'rgba(79,70,229,0.4)' : 'var(--border)'}`,
+                                borderRadius: 'var(--radius-md)',
+                                padding: '0.75rem',
+                                background: status === 'done' ? 'rgba(16,185,129,0.05)' : status === 'failed' ? 'rgba(239,68,68,0.05)' : isNext ? 'rgba(79,70,229,0.05)' : 'var(--surface)',
+                                opacity: status === 'failed' ? 0.7 : 1,
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: isNext ? '0.5rem' : 0 }}>
+                                    <div style={{ background: color, color: 'white', width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontWeight: 600, fontSize: '0.85rem', textDecoration: status !== 'pending' ? 'line-through' : 'none', color: status !== 'pending' ? 'var(--text-muted)' : 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.location}</div>
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{m.id} · {m.type}</div>
+                                    </div>
+                                    {status === 'done' && <CheckCircle size={16} color="#10b981" />}
+                                    {status === 'failed' && <XCircle size={16} color="#ef4444" />}
+                                    {isNext && <MapPin size={16} color="#4f46e5" />}
+                                </div>
+                                {isNext && (
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button onClick={() => handleStatus(i, 'done')} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.1)', color: '#065f46', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                                            <CheckCircle size={14} /> Visitado
+                                        </button>
+                                        <button onClick={() => handleStatus(i, 'failed')} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#b91c1c', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                                            <XCircle size={14} /> Saltado
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </>
+            )}
 
+            {/* — MODO SELECCIÓN — */}
+            {!isTraveling && (
+                <>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                        En ruta ({orderedStops.length})
+                    </div>
+                    {orderedStops.length === 0 && (
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.75rem', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)' }}>
+                            Agrega paradas desde abajo
+                        </div>
+                    )}
+                    {orderedStops.map((m, i) => (
+                        <div
+                            key={m.id}
+                            draggable
+                            onDragStart={e => onDragStart(e, i)}
+                            onDragEnter={e => onDragEnter(e, i)}
+                            onDragOver={onDragOver}
+                            onDragEnd={onDragEnd}
+                            style={{ border: '1px solid rgba(79,70,229,0.3)', borderRadius: 'var(--radius-md)', padding: '0.65rem 0.75rem', background: 'rgba(79,70,229,0.04)', cursor: 'grab', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        >
+                            <GripVertical size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                            <div style={{ background: '#4f46e5', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.location}</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{m.id} · {m.type}</div>
+                            </div>
+                            <button onClick={() => toggleStop(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.25rem', display: 'flex', flexShrink: 0 }}>
+                                <XCircle size={17} />
+                            </button>
+                        </div>
+                    ))}
+                    {excludedStops.length > 0 && (
+                        <>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginTop: '0.25rem' }}>
+                                Excluidas ({excludedStops.length})
+                            </div>
+                            {excludedStops.map(m => (
+                                <div
+                                    key={m.id}
+                                    onClick={() => toggleStop(m)}
+                                    style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '0.65rem 0.75rem', background: 'var(--surface)', opacity: 0.5, cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                >
+                                    <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px dashed #9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <Plus size={12} color="#9ca3af" />
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.location}</div>
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{m.id} · {m.type}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </>
+                    )}
+                </>
+            )}
+        </div>
+    );
+
+    // ── MOBILE LAYOUT: mapa fijo arriba, panel desplegable abajo ──
+    if (mobile) {
+        const panelHeight = panelOpen ? '58%' : '158px';
+        return (
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Mapa — ocupa el espacio restante encima del panel */}
+                <div ref={containerRef} style={{ flex: 1, minHeight: 0 }} />
+
+                {/* Bottom sheet panel */}
+                <div style={{
+                    height: panelHeight,
+                    transition: 'height 0.3s ease',
+                    background: 'var(--surface)',
+                    borderTop: '1px solid var(--border)',
+                    borderTopLeftRadius: 16, borderTopRightRadius: 16,
+                    boxShadow: '0 -4px 20px rgba(0,0,0,0.10)',
+                    display: 'flex', flexDirection: 'column',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                }}>
+                    {/* Drag handle / toggle */}
+                    <div
+                        onClick={() => {
+                            setPanelOpen(p => !p);
+                            setTimeout(() => mapRef.current?.invalidateSize(), 320);
+                        }}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.5rem 1rem 0.25rem', cursor: 'pointer', flexShrink: 0 }}
+                    >
+                        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', marginBottom: 4 }} />
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', userSelect: 'none' }}>
+                            {panelOpen ? '▼ Ocultar lista' : `▲ Ver paradas (${orderedStops.length || travelList?.length || 0})`}
+                        </span>
+                    </div>
+
+                    {/* Stats + botón principal — siempre visibles */}
+                    <div style={{ padding: '0 0.75rem 0.5rem', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            {[['Distancia', `${totalDistance} km`], ['Tiempo', `${totalTime} min`]].map(([label, val]) => (
+                                <div key={label} style={{ flex: 1, background: 'var(--bg-color)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '0.35rem', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.63rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label}</div>
+                                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary)' }}>{val}</div>
+                                </div>
+                            ))}
+                        </div>
+                        {allHandled ? (
+                            <div style={{ background: 'var(--success-light)', borderRadius: 'var(--radius-md)', padding: '0.6rem', textAlign: 'center', color: '#065f46', fontSize: '0.85rem', fontWeight: 600 }}>
+                                ¡Ruta finalizada!
+                            </div>
+                        ) : !isTraveling ? (
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                    className="btn btn-primary"
+                                    style={{ flex: 1, justifyContent: 'center', gap: '0.5rem', padding: '0.6rem 1rem', opacity: orderedStops.length === 0 ? 0.5 : 1 }}
+                                    disabled={orderedStops.length === 0}
+                                    onClick={startTravel}
+                                >
+                                    <Play size={16} />
+                                    Iniciar {orderedStops.length < stops.length ? `(${orderedStops.length})` : 'Ruta'}
+                                </button>
+                                <button
+                                    className="btn"
+                                    style={{ padding: '0.6rem 0.75rem', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', opacity: orderedStops.length < 3 ? 0.4 : 1 }}
+                                    disabled={orderedStops.length < 3}
+                                    onClick={optimizeOrder}
+                                    title="Orden óptimo"
+                                >
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                                </button>
+                            </div>
+                        ) : (
+                            <button className="btn btn-danger" style={{ width: '100%', justifyContent: 'center', gap: '0.5rem', padding: '0.6rem 1rem' }} onClick={endTravel}>
+                                <Square size={16} /> Finalizar Ruta
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Lista de paradas — solo visible al expandir */}
+                    {panelOpen && (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '0 0.75rem 1rem', borderTop: '1px solid var(--border)' }}>
+                            <div style={{ paddingTop: '0.5rem' }}>
+                                {stopsList}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <style>{`.leaflet-routing-container { display: none !important; }`}</style>
+            </div>
+        );
+    }
+
+    // ── DESKTOP LAYOUT (sin cambios) ──
+    return (
+        <div style={{ display: 'flex', flexDirection: 'row', height: '100%', margin: '-1.5rem' }}>
             {/* Panel de control */}
             <div style={{ width: 300, background: 'var(--surface)', borderRight: '1px solid var(--border)', overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
-
-                {/* Volver */}
                 {onBack && (
                     <div
                         style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '-0.25rem' }}
@@ -287,8 +490,6 @@ export default function MapView({ machines, onBack }) {
                         Volver al historial
                     </div>
                 )}
-
-                {/* Stats */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                     {[['Distancia', `${totalDistance} km`], ['Tiempo Est.', `${totalTime} min`]].map(([label, val]) => (
                         <div key={label} style={{ background: 'var(--bg-color)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '0.75rem', textAlign: 'center' }}>
@@ -297,8 +498,6 @@ export default function MapView({ machines, onBack }) {
                         </div>
                     ))}
                 </div>
-
-                {/* Botón principal */}
                 {allHandled ? (
                     <div style={{ background: 'var(--success-light)', borderRadius: 'var(--radius-md)', padding: '1rem', textAlign: 'center', color: '#065f46', fontSize: '0.875rem', fontWeight: 600 }}>
                         ¡Ruta finalizada!<br />
@@ -331,141 +530,7 @@ export default function MapView({ machines, onBack }) {
                         <Square size={16} /> Finalizar Ruta
                     </button>
                 )}
-
-                {/* Lista de paradas */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-
-                    {/* — MODO VIAJE — */}
-                    {isTraveling && travelList && (
-                        <>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-                                Paradas ({travelList.length})
-                            </div>
-                            {travelList.map((m, i) => {
-                                const status = statuses[i];
-                                const isNext = i === firstPendingIdx;
-                                const color = markerColor(status, isNext);
-                                return (
-                                    <div key={m.id} style={{
-                                        border: `1px solid ${status === 'done' ? 'rgba(16,185,129,0.3)' : status === 'failed' ? 'rgba(239,68,68,0.3)' : isNext ? 'rgba(79,70,229,0.4)' : 'var(--border)'}`,
-                                        borderRadius: 'var(--radius-md)',
-                                        padding: '0.75rem',
-                                        background: status === 'done' ? 'rgba(16,185,129,0.05)' : status === 'failed' ? 'rgba(239,68,68,0.05)' : isNext ? 'rgba(79,70,229,0.05)' : 'var(--surface)',
-                                        opacity: status === 'failed' ? 0.7 : 1,
-                                    }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: isNext ? '0.5rem' : 0 }}>
-                                            <div style={{ background: color, color: 'white', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontWeight: 600, fontSize: '0.8rem', textDecoration: status !== 'pending' ? 'line-through' : 'none', color: status !== 'pending' ? 'var(--text-muted)' : 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.location}</div>
-                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{m.id} · {m.type}</div>
-                                            </div>
-                                            {status === 'done' && <CheckCircle size={16} color="#10b981" />}
-                                            {status === 'failed' && <XCircle size={16} color="#ef4444" />}
-                                            {isNext && <MapPin size={16} color="#4f46e5" />}
-                                        </div>
-                                        {isNext && (
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <button onClick={() => handleStatus(i, 'done')} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', padding: '0.375rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.1)', color: '#065f46', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
-                                                    <CheckCircle size={14} /> Visitado
-                                                </button>
-                                                <button onClick={() => handleStatus(i, 'failed')} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', padding: '0.375rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#b91c1c', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
-                                                    <XCircle size={14} /> Saltado
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </>
-                    )}
-
-                    {/* — MODO SELECCIÓN — */}
-                    {!isTraveling && (
-                        <>
-                            {/* Stops en ruta (draggable) */}
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-                                En ruta ({orderedStops.length})
-                            </div>
-
-                            {orderedStops.length === 0 && (
-                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.75rem', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)' }}>
-                                    Agrega paradas desde abajo
-                                </div>
-                            )}
-
-                            {orderedStops.map((m, i) => (
-                                <div
-                                    key={m.id}
-                                    draggable
-                                    onDragStart={e => onDragStart(e, i)}
-                                    onDragEnter={e => onDragEnter(e, i)}
-                                    onDragOver={onDragOver}
-                                    onDragEnd={onDragEnd}
-                                    style={{
-                                        border: '1px solid rgba(79,70,229,0.3)',
-                                        borderRadius: 'var(--radius-md)',
-                                        padding: '0.6rem 0.75rem',
-                                        background: 'rgba(79,70,229,0.04)',
-                                        cursor: 'grab',
-                                        userSelect: 'none',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                    }}
-                                >
-                                    <GripVertical size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                                    <div style={{ background: '#4f46e5', color: 'white', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontWeight: 600, fontSize: '0.78rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.location}</div>
-                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{m.id} · {m.type}</div>
-                                    </div>
-                                    <button
-                                        onClick={() => toggleStop(m)}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.125rem', display: 'flex', flexShrink: 0 }}
-                                        title="Quitar de la ruta"
-                                    >
-                                        <XCircle size={15} />
-                                    </button>
-                                </div>
-                            ))}
-
-                            {/* Stops excluidos */}
-                            {excludedStops.length > 0 && (
-                                <>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginTop: '0.25rem' }}>
-                                        Excluidas ({excludedStops.length})
-                                    </div>
-                                    {excludedStops.map(m => (
-                                        <div
-                                            key={m.id}
-                                            onClick={() => toggleStop(m)}
-                                            style={{
-                                                border: '1px solid var(--border)',
-                                                borderRadius: 'var(--radius-md)',
-                                                padding: '0.6rem 0.75rem',
-                                                background: 'var(--surface)',
-                                                opacity: 0.5,
-                                                cursor: 'pointer',
-                                                userSelect: 'none',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '0.5rem',
-                                            }}
-                                        >
-                                            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px dashed #9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                                <Plus size={10} color="#9ca3af" />
-                                            </div>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontWeight: 600, fontSize: '0.78rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.location}</div>
-                                                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{m.id} · {m.type}</div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </>
-                            )}
-                        </>
-                    )}
-                </div>
+                {stopsList}
             </div>
 
             {/* Mapa */}

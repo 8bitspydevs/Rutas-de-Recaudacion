@@ -71,10 +71,20 @@ router.patch('/:id', (req, res) => {
   res.json(formatMachine(m));
 });
 
-// DELETE /api/machines/:id
+// DELETE /api/machines/:id — cascade-deletes dependent rows
 router.delete('/:id', (req, res) => {
-  const info = db.prepare('DELETE FROM maquina WHERE maq_id = ?').run(req.params.id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Máquina no encontrada' });
+  const id = req.params.id;
+  const exists = db.prepare('SELECT 1 FROM maquina WHERE maq_id = ?').get(id);
+  if (!exists) return res.status(404).json({ error: 'Máquina no encontrada' });
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM rec_img WHERE rre_id IN (SELECT rre_id FROM rec_registro WHERE maq_id = ?)').run(id);
+    db.prepare('DELETE FROM rec_registro WHERE maq_id = ?').run(id);
+    db.prepare('DELETE FROM maq_gastos WHERE maq_id = ?').run(id);
+    db.prepare('DELETE FROM route_run_stops WHERE machine_id = ?').run(id);
+    db.prepare('DELETE FROM maquina WHERE maq_id = ?').run(id);
+  })();
+
   res.json({ ok: true });
 });
 

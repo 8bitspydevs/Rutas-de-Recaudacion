@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import * as LucideIcons from 'lucide-react';
 import MapView from './MapView';
-import { getMachines, getRecords, createRecord, updateMachine, getRouteRuns, updateStop, updateRouteRun, createMachine, getTipos, getLugares, createLugar } from './api';
+import MobileApp from './MobileApp';
+import { getMachines, getRecords, createRecord, updateMachine, getRouteRuns, updateStop, updateRouteRun, createMachine, getTipos, getLugares, createLugar, login, getToken, clearToken } from './api';
 import './index.css';
 
 const Icon = ({ name, size = 24, className = "" }) => {
@@ -766,224 +767,19 @@ const AdminDashboard = ({ records, machines, onSaveMachine, onMachineCreated, on
     );
 };
 
-const MobileApp = ({ onSaveRecord, onLogout }) => {
-    const [view, setView] = useState('home'); // home, route, machine, camera
-
-    // Interceptar la vista 'profile' para Logout
-    if (view === 'profile') {
-        onLogout();
-        return null;
-    }
-
-    const [contEntrada, setContEntrada] = useState('');
-    const [contSalida, setContSalida] = useState('');
-    const [contDigital, setContDigital] = useState('');
-    const [montoRetirado, setMontoRetirado] = useState('');
-
-    const preCalculo = (parseInt(contDigital) || 0) * 500;
-
-    const handleSave = async () => {
-        if (!contEntrada || !contSalida || !contDigital || !montoRetirado) {
-            alert('Por favor complete todos los campos de contadores');
-            return;
-        }
-        
-        const fisico = parseInt(montoRetirado) || 0;
-        const status = fisico === preCalculo ? 'OK' : 'Descuadre';
-
-        try {
-            await onSaveRecord({
-                machine: "MQR-001",
-                location: "Supermercado Lider",
-                preCalc: preCalculo,
-                fisico: fisico,
-                status: status,
-                contEntrada, contSalida, contDigital
-            });
-
-            alert("¡Registro Guardado Exitosamente!");
-            setView('route');
-            setContEntrada('');
-            setContSalida('');
-            setContDigital('');
-            setMontoRetirado('');
-        } catch (err) {
-            alert('Error al guardar: asegúrate de que el servidor backend esté corriendo (npm run server:dev).\n\nDetalle: ' + err.message);
-        }
-    };
-
-    return (
-        <div className="mobile-simulator-wrapper animate-fade-in">
-            <div className="mobile-device">
-                <div className="mobile-header">
-                    <div className="flex justify-between items-center text-xs mb-4 opacity-70 font-medium">
-                        <span>14:30</span>
-                        <div className="flex gap-1 items-center">
-                            <Icon name="signal-high" size={14} />
-                            <Icon name="wifi" size={14} />
-                            <Icon name="battery-full" size={14} />
-                        </div>
-                    </div>
-                    <div className="text-xl font-bold">SEPRISA Terreno</div>
-                </div>
-
-                <div className="mobile-content relative">
-                    {view === 'home' && (
-                        <div className="animate-fade-in">
-                            <h2 className="text-lg font-bold mb-4">Iniciar Ruta</h2>
-                            <div className="card p-4 mb-4">
-                                <div className="input-group">
-                                    <label className="label">Vehículo Asignado</label>
-                                    <select className="input">
-                                        <option>KIA Furgón (AB-CD-12)</option>
-                                        <option>Peugeot Partner (WX-YZ-99)</option>
-                                    </select>
-                                </div>
-                                <div className="input-group">
-                                    <label className="label">Kilometraje Inicial</label>
-                                    <input type="number" className="input" placeholder="Ej: 145000" />
-                                </div>
-                                <button className="btn btn-primary w-full mt-2" onClick={() => setView('route')}>
-                                    <Icon name="play" size={16} /> Comenzar Jornada
-                                </button>
-                            </div>
-                            
-                            <div className="flex items-center justify-between text-muted text-sm px-2">
-                                <span>Última sincro: Hace 2m</span>
-                                <Icon name="cloud-off" size={16} className="text-danger" />
-                            </div>
-                        </div>
-                    )}
-
-                    {view === 'route' && (
-                        <div className="animate-fade-in">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-bold">Mi Ruta de Hoy</h2>
-                                <span className="badge badge-primary">3 Locales</span>
-                            </div>
-                            
-                            <div className="flex flex-col gap-3">
-                                <div className="card p-4" onClick={() => setView('machine')}>
-                                    <div className="flex justify-between items-start mb-2">
-                                        <span className="font-semibold">Supermercado Lider</span>
-                                        <Icon name="chevron-right" size={18} className="text-muted" />
-                                    </div>
-                                    <div className="text-sm text-muted flex items-center gap-1 mb-2">
-                                        <Icon name="map-pin" size={14} /> Av. Principal 123
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <span className="badge badge-warning">2 Máquinas</span>
-                                    </div>
-                                </div>
-
-                                <div className="card p-4 opacity-60">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <span className="font-semibold text-muted">Mall Centro (Completado)</span>
-                                        <Icon name="check-circle" size={18} className="text-success" />
-                                    </div>
-                                    <div className="text-sm text-muted flex items-center gap-1 mb-2">
-                                        <Icon name="map-pin" size={14} /> Calle Arturo Prat 45
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button className="btn btn-danger w-full mt-6">
-                                <Icon name="square" size={16} /> Finalizar Ruta
-                            </button>
-                        </div>
-                    )}
-
-                    {view === 'machine' && (
-                        <div className="animate-fade-in">
-                            <div className="flex items-center gap-2 mb-4 cursor-pointer" onClick={() => setView('route')}>
-                                <Icon name="arrow-left" size={20} />
-                                <span className="font-semibold">Volver</span>
-                            </div>
-
-                            <div className="card p-4 mb-4 bg-primary-light border-0">
-                                <h3 className="font-bold text-primary">MQR-001 (Peluches)</h3>
-                                <div className="text-sm text-primary">Supermercado Lider</div>
-                            </div>
-
-                            <h4 className="font-semibold mb-2">Registro de Contadores</h4>
-                            <div className="card p-4 mb-4 text-sm">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="input-group">
-                                        <label className="label">Cont. Entrada</label>
-                                        <input type="number" className="input" placeholder="0" value={contEntrada} onChange={e => setContEntrada(e.target.value)} />
-                                    </div>
-                                    <div className="input-group">
-                                        <label className="label">Cont. Salida</label>
-                                        <input type="number" className="input" placeholder="0" value={contSalida} onChange={e => setContSalida(e.target.value)} />
-                                    </div>
-                                    <div className="input-group">
-                                        <label className="label">Cont. Digital (Monedas)</label>
-                                        <input type="number" className="input" placeholder="0" value={contDigital} onChange={e => setContDigital(e.target.value)} />
-                                    </div>
-                                </div>
-                                
-                                <div className="p-3 bg-bg-color rounded mt-2 flex justify-between items-center text-primary font-bold">
-                                    <span>Pre-Cálculo de Sistema ($500 c/u):</span>
-                                    <span>${preCalculo.toLocaleString('es-CL')}</span>
-                                </div>
-                            </div>
-
-                            <h4 className="font-semibold mb-2">Recaudación Física</h4>
-                            <div className="card p-4 mb-4">
-                                <div className="input-group">
-                                    <label className="label">Dinero Retirado ($)</label>
-                                    <input type="number" className="input" placeholder="Ej: 45000" value={montoRetirado} onChange={e => setMontoRetirado(e.target.value)} />
-                                </div>
-                                
-                                <button className="btn btn-secondary w-full justify-center text-sm" onClick={() => alert("Simulando abrir cámara...")}>
-                                    <Icon name="camera" size={16} /> Tomar Fotografía Evidencia
-                                </button>
-                            </div>
-
-                            <button className="btn btn-success w-full" style={{ backgroundColor: 'var(--success)', color: 'white' }} onClick={handleSave}>
-                                <Icon name="save" size={16} /> Guardar Registro
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                <div className="mobile-bottom-nav">
-                    <div className={`mobile-nav-item ${view === 'home' || view === 'route' || view === 'machine' ? 'active' : ''}`} onClick={() => setView('home')}>
-                        <Icon name="route" />
-                        <span>Ruta</span>
-                    </div>
-                    <div className="mobile-nav-item">
-                        <Icon name="receipt" />
-                        <span>Gastos</span>
-                    </div>
-                    <div className="mobile-nav-item">
-                        <Icon name="history" />
-                        <span>Historial</span>
-                    </div>
-                    <div className={`mobile-nav-item ${view === 'profile' ? 'active' : ''}`} onClick={() => setView('profile')}>
-                        <Icon name="user" />
-                        <span>Salir</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 const LoginScreen = ({ onLogin }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        // Simulación de autenticación (Hardcoded para el prototipo)
-        if (username === 'admin' && password === 'admin') {
-            onLogin('admin');
-        } else if (username === 'terreno' && password === 'terreno') {
-            onLogin('mobile');
-        } else {
-            setError('Credenciales inválidas. Intente admin/admin o terreno/terreno.');
+        setError('');
+        try {
+            const usuario = await login(username, password);
+            onLogin(usuario.rol === 'terreno' ? 'mobile' : 'admin');
+        } catch {
+            setError('Credenciales inválidas.');
         }
     };
 
@@ -1007,23 +803,25 @@ const LoginScreen = ({ onLogin }) => {
                 <form onSubmit={handleSubmit} className="flex flex-col gap-3">
                     <div className="input-group mb-0">
                         <label className="label text-xs">Usuario</label>
-                        <input 
-                            type="text" 
-                            className="input py-1.5" 
-                            placeholder="Ej: admin o terreno" 
+                        <input
+                            type="text"
+                            className="input py-1.5"
+                            placeholder="Ej: admin o terreno"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
+                            autoComplete="off"
                             required
                         />
                     </div>
                     <div className="input-group mb-0">
                         <label className="label text-xs">Contraseña</label>
-                        <input 
-                            type="password" 
-                            className="input py-1.5" 
-                            placeholder="••••••••" 
+                        <input
+                            type="password"
+                            className="input py-1.5"
+                            placeholder="••••••••"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="current-password"
                             required
                         />
                     </div>
@@ -1033,18 +831,24 @@ const LoginScreen = ({ onLogin }) => {
                     </button>
                 </form>
 
-                <div className="mt-4 text-center text-xs text-muted">
-                    <p className="mb-1"><strong>Cuentas de Prueba:</strong></p>
-                    <p className="mb-0.5">Admin: <code className="bg-surface-hover px-1 rounded">admin / admin</code></p>
-                    <p>Terreno: <code className="bg-surface-hover px-1 rounded">terreno / terreno</code></p>
-                </div>
             </div>
         </div>
     );
 };
 
+// Detectar rol desde JWT sin decodificarlo completamente (solo la parte payload)
+function getRolFromToken() {
+    const token = getToken();
+    if (!token) return null;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.exp * 1000 < Date.now()) { clearToken(); return null; }
+        return payload.rol === 'terreno' ? 'mobile' : 'admin';
+    } catch { clearToken(); return null; }
+}
+
 const App = () => {
-    const [authUser, setAuthUser] = useState(null);
+    const [authUser, setAuthUser] = useState(() => getRolFromToken());
     const [records, setRecords] = useState([]);
     const [machines, setMachines] = useState([]);
 
@@ -1058,6 +862,13 @@ const App = () => {
         if (authUser) refreshData();
     }, [authUser, refreshData]);
 
+    // Logout automático si el servidor devuelve 401 (token expirado/inválido)
+    useEffect(() => {
+        const handler = () => setAuthUser(null);
+        window.addEventListener('auth:logout', handler);
+        return () => window.removeEventListener('auth:logout', handler);
+    }, []);
+
     const handleAddRecord = async (record) => {
         await createRecord(record);
         await refreshData();
@@ -1069,6 +880,7 @@ const App = () => {
     };
 
     const handleLogout = () => {
+        clearToken();
         setAuthUser(null);
     };
 
@@ -1083,7 +895,7 @@ const App = () => {
             
             {authUser === 'admin' ?
                 <AdminDashboard records={records} machines={machines} onSaveMachine={handleSaveMachine} onMachineCreated={refreshData} onLogout={handleLogout} /> :
-                <MobileApp machines={machines} onSaveRecord={handleAddRecord} onLogout={handleLogout} />
+                <MobileApp machines={machines} onLogout={handleLogout} onRecordSaved={refreshData} />
             }
         </div>
     );

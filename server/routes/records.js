@@ -1,5 +1,17 @@
 import { Router } from 'express';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
+import { dirname, join, extname } from 'path';
 import db from '../db.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const storage = multer.diskStorage({
+  destination: join(__dirname, '../uploads'),
+  filename: (_req, file, cb) => {
+    cb(null, `rec_${Date.now()}${extname(file.originalname)}`);
+  },
+});
+const upload = multer({ storage });
 
 const router = Router();
 
@@ -83,6 +95,19 @@ router.post('/', (req, res) => {
 
   const r = db.prepare(SELECT_RECORD + ' WHERE r.rre_id = ?').get(result.lastInsertRowid);
   res.status(201).json(formatRecord(r));
+});
+
+// POST /api/records/:id/images
+router.post('/:id/images', upload.single('photo'), (req, res) => {
+  const { id } = req.params;
+  if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
+
+  const rimPath = `/uploads/${req.file.filename}`;
+  const result = db.prepare(
+    'INSERT INTO rec_img (rim_path, rim_evento, rre_id) VALUES (?, ?, ?)'
+  ).run(rimPath, 'evidencia', id);
+
+  res.status(201).json({ id: result.lastInsertRowid, path: rimPath });
 });
 
 export default router;

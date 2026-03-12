@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -169,9 +170,10 @@ db.exec(`
 const lugarCount = db.prepare('SELECT COUNT(*) as n FROM lugar').get().n;
 if (lugarCount === 0) {
   db.transaction(() => {
-    // Usuarios
-    db.prepare('INSERT INTO usuario (usu_nombre, usu_user, usu_pass, usu_rol) VALUES (?,?,?,?)').run('Admin Central', 'admin', 'admin', 'admin');
-    db.prepare('INSERT INTO usuario (usu_nombre, usu_user, usu_pass, usu_rol) VALUES (?,?,?,?)').run('Recaudador', 'terreno', 'terreno', 'terreno');
+    // Usuarios (contraseñas hasheadas con bcrypt)
+    const insUsu = db.prepare('INSERT INTO usuario (usu_nombre, usu_user, usu_pass, usu_rol) VALUES (?,?,?,?)');
+    insUsu.run('Admin Central', 'admin', bcrypt.hashSync('admin', 10), 'admin');
+    insUsu.run('Recaudador', 'terreno', bcrypt.hashSync('terreno', 10), 'terreno');
 
     // Tipos de máquina
     db.prepare('INSERT INTO tipomaquina (tmq_desc) VALUES (?)').run('Peluches');
