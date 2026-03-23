@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SEPRISA</string>
+    <string name="title_activity_main">SEPRISA</string>
+    <string name="package_name">com.seprisa.recaudacion</string>
+    <string name="custom_url_scheme">com.seprisa.recaudacion</string>
+</resources>

@@ -16,14 +16,16 @@ const upload = multer({ storage });
 const router = Router();
 
 function formatRecord(r) {
-  const diff = r.rre_cont_real_dif ?? 0;
+  const preCalc  = r.rre_pre_calc   ?? 0;
+  const mntoTotal = r.rre_mnto_total ?? 0;
+  const diff = mntoTotal - preCalc;
   return {
     id: r.rre_id,
     machine: r.maq_id,
     location: r.lgr_nombre ?? '',
-    preCalc: r.rre_pre_calc ?? 0,
-    fisico: r.rre_mnto_total ?? 0,
-    status: diff !== 0 ? `Descuadre ($${Math.abs(diff).toLocaleString('es-PY')})` : 'OK',
+    preCalc,
+    fisico: mntoTotal,
+    status: diff !== 0 ? `Descuadre (${diff > 0 ? '+' : ''}${Math.round(diff).toLocaleString('es-PY')} Gs.)` : 'OK',
     date: r.rre_timestamp?.slice(0, 10) ?? '',
     contEntrada: r.rre_cont_entrada,
     contSalida: r.rre_cont_salida,
@@ -73,7 +75,7 @@ router.post('/', (req, res) => {
 
   const result = db.prepare(`
     INSERT INTO rec_registro (
-      maq_id, lgr_id, rut_id,
+      maq_id, lgr_id, route_run_id,
       rre_pre_calc,
       rre_cont_entrada, rre_cont_salida, rre_cont_rec_digital, rre_cont_rec_pozo,
       rre_cont_real, rre_cont_real_dif,

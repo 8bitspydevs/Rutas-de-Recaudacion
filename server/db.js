@@ -166,6 +166,12 @@ db.exec(`
   );
 `);
 
+// ─── Migrations ──────────────────────────────────────────────────────────────
+const columns = db.prepare("PRAGMA table_info(rec_registro)").all().map(c => c.name);
+if (!columns.includes('route_run_id')) {
+  db.exec('ALTER TABLE rec_registro ADD COLUMN route_run_id INTEGER REFERENCES route_runs(id)');
+}
+
 // ─── Seed data (solo si está vacío) ──────────────────────────────────────────
 const lugarCount = db.prepare('SELECT COUNT(*) as n FROM lugar').get().n;
 if (lugarCount === 0) {

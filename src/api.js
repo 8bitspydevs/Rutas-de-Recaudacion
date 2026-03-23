@@ -65,6 +65,10 @@ export const uploadRecordImage = (recordId, file) => {
 // Config
 export const getConfig = () => request('/config');
 
+// Maintenance
+export const createMaintenance = (data) => request('/maintenance', { method: 'POST', body: JSON.stringify(data) });
+export const getMaintenanceByMachine = (machineId) => request(`/maintenance?machineId=${machineId}`);
+
 // Route Runs
 export const getRouteRuns = (status) => request(status ? `/route-runs?status=${status}` : '/route-runs');
 export const getRouteRun = (id) => request(`/route-runs/${id}`);

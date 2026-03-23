@@ -38,6 +38,7 @@ export default function MapView({ machines, onBack, mobile = false, onRunStarted
     const markersRef = useRef([]);
     const activeStopsRef = useRef([]);
     const dragIdxRef = useRef(null);
+    const touchDragRef = useRef(null); // { idx, startY }
 
     const stops = machines.filter(m => m.coords);
 
@@ -112,6 +113,35 @@ export default function MapView({ machines, onBack, mobile = false, onRunStarted
 
     function onDragEnd() {
         dragIdxRef.current = null;
+    }
+
+    // Touch drag-to-reorder (mobile)
+    function onStopTouchStart(e, i) {
+        e.stopPropagation();
+        touchDragRef.current = { idx: i, startY: e.touches[0].clientY };
+    }
+    function onStopTouchMove(e) {
+        if (!touchDragRef.current) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const dy = e.touches[0].clientY - touchDragRef.current.startY;
+        const ITEM_H = 56;
+        const steps = Math.round(dy / ITEM_H);
+        if (steps === 0) return;
+        const from = touchDragRef.current.idx;
+        const to = Math.max(0, Math.min(orderedStops.length - 1, from + steps));
+        if (to === from) return;
+        touchDragRef.current = { idx: to, startY: e.touches[0].clientY };
+        setOrderedStops(prev => {
+            const next = [...prev];
+            const [item] = next.splice(from, 1);
+            next.splice(to, 0, item);
+            return next;
+        });
+    }
+    function onStopTouchEnd(e) {
+        e.stopPropagation();
+        touchDragRef.current = null;
     }
 
     // Inicializar mapa una sola vez
@@ -345,15 +375,22 @@ export default function MapView({ machines, onBack, mobile = false, onRunStarted
                             onDragEnter={e => onDragEnter(e, i)}
                             onDragOver={onDragOver}
                             onDragEnd={onDragEnd}
-                            style={{ border: '1px solid rgba(79,70,229,0.3)', borderRadius: 'var(--radius-md)', padding: '0.65rem 0.75rem', background: 'rgba(79,70,229,0.04)', cursor: 'grab', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                            style={{ border: '1px solid rgba(79,70,229,0.3)', borderRadius: 'var(--radius-md)', padding: '0.65rem 0.75rem', background: 'rgba(79,70,229,0.04)', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                         >
-                            <GripVertical size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                            <div
+                                onTouchStart={e => onStopTouchStart(e, i)}
+                                onTouchMove={onStopTouchMove}
+                                onTouchEnd={onStopTouchEnd}
+                                style={{ touchAction: 'none', cursor: 'grab', padding: '0.25rem', margin: '-0.25rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}
+                            >
+                                <GripVertical size={18} style={{ color: 'var(--text-muted)' }} />
+                            </div>
                             <div style={{ background: '#4f46e5', color: 'white', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.location}</div>
                                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{m.id} · {m.type}</div>
                             </div>
-                            <button onClick={() => toggleStop(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.25rem', display: 'flex', flexShrink: 0 }}>
+                            <button onClick={() => toggleStop(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '0.25rem', display: 'flex', flexShrink: 0 }}>
                                 <XCircle size={17} />
                             </button>
                         </div>
@@ -387,14 +424,35 @@ export default function MapView({ machines, onBack, mobile = false, onRunStarted
 
     // ── MOBILE LAYOUT: mapa fijo arriba, panel desplegable abajo ──
     if (mobile) {
-        const panelHeight = panelOpen ? '58%' : '158px';
+        // La altura collapsed suma el safe-area para que el botón no quede tapado
+        const panelHeight = panelOpen ? '58%' : 'calc(158px + env(safe-area-inset-bottom))';
+
+        function togglePanel(open) {
+            setPanelOpen(open);
+            setTimeout(() => mapRef.current?.invalidateSize(), 320);
+        }
+
+        // Swipe gesture: dedo hacia arriba abre el panel, hacia abajo lo cierra
+        let touchStartY = null;
+        function onTouchStart(e) { touchStartY = e.touches[0].clientY; }
+        function onTouchEnd(e) {
+            if (touchStartY === null) return;
+            const dy = touchStartY - e.changedTouches[0].clientY;
+            if (dy > 40) togglePanel(true);
+            else if (dy < -40) togglePanel(false);
+            touchStartY = null;
+        }
+
         return (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {/* Mapa — ocupa el espacio restante encima del panel */}
                 <div ref={containerRef} style={{ flex: 1, minHeight: 0 }} />
 
                 {/* Bottom sheet panel */}
-                <div style={{
+                <div
+                    onTouchStart={onTouchStart}
+                    onTouchEnd={onTouchEnd}
+                    style={{
                     height: panelHeight,
                     transition: 'height 0.3s ease',
                     background: 'var(--surface)',
@@ -404,13 +462,11 @@ export default function MapView({ machines, onBack, mobile = false, onRunStarted
                     display: 'flex', flexDirection: 'column',
                     overflow: 'hidden',
                     flexShrink: 0,
+                    paddingBottom: 'env(safe-area-inset-bottom)',
                 }}>
                     {/* Drag handle / toggle */}
                     <div
-                        onClick={() => {
-                            setPanelOpen(p => !p);
-                            setTimeout(() => mapRef.current?.invalidateSize(), 320);
-                        }}
+                        onClick={() => togglePanel(!panelOpen)}
                         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.5rem 1rem 0.25rem', cursor: 'pointer', flexShrink: 0 }}
                     >
                         <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', marginBottom: 4 }} />
